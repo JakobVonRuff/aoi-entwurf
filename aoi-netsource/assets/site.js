@@ -1,6 +1,6 @@
 // AOI: alles, was beide Seiten ohne 3D brauchen. Navigation, sanftes Scrollen, Einblendungen.
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
-// „Bewegung reduzieren“ im System: 3D bleibt, aber nichts bewegt sich mehr von selbst.
+// „Bewegung reduzieren“ im System: 3D und alles, was vom Scrollen kommt, bleibt, aber nichts bewegt sich mehr von selbst.
 // Beim lokalen Testen, in der GitHub-Vorschau und mit ?motion immer die volle Fassung, mit ?calm die ruhige.
 const q = location.search;
 export const calm = q.includes('calm') || (matchMedia('(prefers-reduced-motion:reduce)').matches && !q.includes('motion') && !/^(localhost|127\.)|\.github\.io$/.test(location.hostname));
@@ -26,38 +26,6 @@ addEventListener('wheel', stop, { passive: true });
 addEventListener('touchstart', stop, { passive: true });
 addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) stop(); });
 
-/* ---------- Bühne: Scrollen rastet sauber am nächsten Kapitel ein ----------
-   Der Bildlauf bleibt der normale des Browsers. Erst wenn er kurz ruht, läuft die Seite
-   in Scrollrichtung zum nächsten Halt. Ein kleiner Schubs reicht also für einen ganzen Wechsel. */
-export function pinnedStage(stageEl, steps) {
-  const len = () => stageEl.offsetHeight - innerHeight;
-  const top = () => stageEl.getBoundingClientRect().top + scrollY;
-  const yOf = i => top() + len() * i / steps;
-  let last = scrollY, dir = 1, timer = 0, touching = false;
-  function settle() {
-    if (touching || auto || calm || location.search.includes('nosnap')) return;
-    const y = scrollY, t = top(), L = len();
-    if (y <= t + 1 || y >= t + L - 1) return;
-    const s = (y - t) / L * steps, i = Math.floor(s), f = s - i;
-    if (f < .004 || f > .996) return;
-    const target = dir > 0 ? (f > .05 ? i + 1 : i) : (f < .95 ? i : i + 1);
-    scrollToY(yOf(target), 620 + 760 * Math.abs(target - s));
-  }
-  addEventListener('scroll', () => {
-    if (auto) return;
-    const y = scrollY;
-    if (y !== last) dir = Math.sign(y - last);
-    last = y;
-    clearTimeout(timer); timer = setTimeout(settle, 110);
-  }, { passive: true });
-  addEventListener('touchstart', () => { touching = true; }, { passive: true });
-  addEventListener('touchend', () => { touching = false; clearTimeout(timer); timer = setTimeout(settle, 180); }, { passive: true });
-  return {
-    progress: () => clamp((scrollY - top()) / len()),
-    goto: i => scrollToY(yOf(i), 900 + 500 * Math.min(2, Math.abs(i - (scrollY - top()) / len() * steps))),
-  };
-}
-
 /* ---------- Navigation, Menü, Sprungmarken ---------- */
 const nav = document.querySelector('.nav');
 const onNav = () => nav.classList.toggle('top', scrollY < 24);
@@ -70,8 +38,6 @@ if (burger) burger.addEventListener('click', () => {
 });
 const closeMenu = () => { document.documentElement.classList.remove('menu-open'); burger && burger.setAttribute('aria-expanded', 'false'); };
 
-// Sprungziele innerhalb der Bühne meldet die jeweilige Seite an
-export const anchors = new Map();
 const ds = document.getElementById('ds-details');
 function openDs() { if (ds) ds.open = true; }
 if (location.hash === '#datenschutz') openDs();
@@ -82,11 +48,9 @@ document.addEventListener('click', e => {
   const id = a.getAttribute('href').slice(1);
   closeMenu();
   if (id === 'datenschutz') openDs();
-  if (anchors.has(id)) { e.preventDefault(); anchors.get(id)(); history.replaceState(null, '', '#' + id); return; }
   const el = document.getElementById(id);
   if (!el) return;
   e.preventDefault();
-  if (a.closest('.static-off')) return;
   const y = id === 'start' ? 0 : el.getBoundingClientRect().top + scrollY - 40;
   scrollToY(y, 1250);
   history.replaceState(null, '', '#' + id);

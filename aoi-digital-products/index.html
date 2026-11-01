@@ -36,54 +36,123 @@
 </header>
 
 <main id="start">
-  <section class="stage" id="produkte" aria-label="So funktioniert AOI Digital Products">
-    <div class="pin">
+  <section class="mod hero hero-q" aria-labelledby="h-frage">
+    <div class="glow" aria-hidden="true"></div>
+    <canvas aria-hidden="true"></canvas>
+    <div class="q-copy">
+      <p class="mono">AOI Digital Products</p>
+      <h1 class="q" id="h-frage">Auf der Suche nach dem <em>richtigen PC</em>, der <em>richtigen Lizenz?</em></h1>
+      <p class="slogan load-late">PC- und Lizenz-Vermittlung aus einer Hand</p>
+      <div class="cta load-late">
+        <a class="btn" href="../aoi-netsource/">Zum PC Katalog <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4"/></svg></a>
+        <a class="btn ghost" href="#kontakt">Schreib uns</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="mod hero row-sec" id="auswahl" aria-labelledby="h-alles">
+    <div class="glow" aria-hidden="true"></div>
+    <canvas aria-hidden="true"></canvas>
+    <div class="row-copy">
+      <h2 class="big-h" id="h-alles" data-rv>Hier findest du alles von <em>Büro</em> bis hin zu <em>Gaming.</em></h2>
+    </div>
+    <div class="row-labels">
+      <a href="../aoi-netsource/#alltag"><b>Alltag</b><span>PC + Programm</span></a>
+      <a href="#buero"><b>Büro</b><span>PC + Office</span></a>
+      <a href="#gaming"><b>Gaming</b><span>Gaming-PC + Spiel</span></a>
+    </div>
+  </section>
+
+  <section class="cat solo" id="buero" aria-labelledby="h-buero">
+    <div class="mod cat-view">
       <div class="glow" aria-hidden="true"></div>
-      <canvas class="gl" aria-hidden="true"></canvas>
-
-      <div class="beat beat-q" data-i="0">
-        <p class="mono">AOI Digital Products</p>
-        <h1 class="q">Auf der Suche nach dem <em>richtigen PC</em>, der <em>richtigen Lizenz?</em></h1>
-        <p class="slogan load-late">PC- und Lizenz-Vermittlung aus einer Hand</p>
-        <div class="cta load-late">
-          <a class="btn" href="../aoi-netsource/">Zum PC Katalog <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4"/></svg></a>
-          <a class="btn ghost" href="#kontakt">Schreib uns</a>
-        </div>
+      <div class="words" aria-hidden="true"></div>
+      <canvas tabindex="0" role="img" aria-label="Büro: 3D-Modell. Ziehen dreht den PC."></canvas>
+    </div>
+    <div class="cat-foot">
+      <header class="cat-h">
+        <p class="port">Büro</p>
+        <h3 id="h-buero">Büro</h3>
+        <p class="cat-sub">Office, Homeoffice und Verwaltung – zuverlässig für jeden Arbeitstag.</p>
+        <ul class="chips"><li>Office</li><li>Homeoffice</li><li>Verwaltung</li></ul>
+      </header>
+      <div class="tiers">
+        <article class="pc-card front" aria-label="Büro">
+          <div class="pc-art static-icons ics" aria-hidden="true"><svg viewBox="0 0 64 64"><rect x="20" y="4" width="26" height="54" rx="3"/><path d="M25 13 H41 M25 19 H41"/><path d="M25 27 H41" style="stroke-dasharray:2 3"/><circle class="fill" cx="33" cy="49" r="3.2"/><path d="M24 58 V61 M42 58 V61"/></svg><svg viewBox="0 0 64 64"><rect x="6" y="14" width="46" height="40" rx="4"/><path d="M6 23 H52 M20 23 V54 M36 23 V54 M6 33 H52 M6 43 H52"/><rect class="fill" x="38" y="35" width="12" height="6"/><g class="badge"><circle cx="52" cy="12" r="7"/><path d="M48.5 12 L51 14.5 L55.5 9.5"/></g></svg></div>
+          <dl class="spec"><div><dt>PC</dt><dd>Büro-PC</dd></div><div><dt>Lizenz</dt><dd>Office</dd></div></dl>
+          <div class="act">
+            <span class="soon"><i aria-hidden="true"></i>Bald verfügbar</span>
+            <a class="btn" href="../aoi-netsource/#buero">zum PC Katalog <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4"/></svg></a>
+          </div>
+        </article>
       </div>
-      <div class="hint" aria-hidden="true"><span>Scrollen</span><b></b></div>
+    </div>
+  </section>
 
-      <div class="beat beat-c" data-i="1">
-        <h2 class="beat-h">Hier findest du alles von <em>Büro</em> bis hin zu <em>Gaming.</em></h2>
+  <section class="cat solo" id="gaming" aria-labelledby="h-gaming">
+    <div class="mod cat-view">
+      <div class="glow" aria-hidden="true"></div>
+      <div class="words" aria-hidden="true"></div>
+      <canvas tabindex="0" role="img" aria-label="Gaming: 3D-Modell. Ziehen dreht den PC."></canvas>
+    </div>
+    <div class="cat-foot">
+      <header class="cat-h">
+        <p class="port">Gaming</p>
+        <h3 id="h-gaming">Gaming</h3>
+        <p class="cat-sub">Hohe Bildraten, starke Grafik – gebaut für aktuelle Spiele.</p>
+        <ul class="chips"><li>Hohe Bildraten</li><li>Starke Grafik</li><li>Aktuelle Spiele</li></ul>
+      </header>
+      <div class="tiers">
+        <article class="pc-card front" aria-label="Gaming">
+          <div class="pc-art static-icons ics" aria-hidden="true"><svg viewBox="0 0 64 64"><rect x="12" y="4" width="40" height="54" rx="3"/><rect x="16" y="8" width="24" height="46" rx="1.5"/><circle class="accent" cx="28" cy="20" r="7"/><circle class="accent" cx="28" cy="41" r="7"/><circle class="fill" cx="28" cy="20" r="2"/><circle class="fill" cx="28" cy="41" r="2"/><path class="rgb" d="M46 9 V53"/><path d="M18 58 V61 M46 58 V61"/></svg><svg viewBox="0 0 64 64"><path d="M18 22 H46 C54 22 59 30 59 39 C59 47 52 51 47 46 L42 41 H22 L17 46 C12 51 5 47 5 39 C5 30 10 22 18 22 Z"/><path d="M17 29 V39 M12 34 H22"/><circle class="fill" cx="43" cy="31" r="2.6"/><circle class="fill" cx="49" cy="36" r="2.6"/><g class="badge"><circle cx="52" cy="10" r="7"/><path d="M48.5 10 L51 12.5 L55.5 7.5"/></g></svg></div>
+          <dl class="spec"><div><dt>PC</dt><dd>Gaming-PC</dd></div><div><dt>Lizenz</dt><dd>Spiel</dd></div></dl>
+          <div class="act">
+            <span class="soon"><i aria-hidden="true"></i>Bald verfügbar</span>
+            <a class="btn" href="../aoi-netsource/#gaming">zum PC Katalog <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4"/></svg></a>
+          </div>
+        </article>
       </div>
+    </div>
+  </section>
 
-      <div class="beat beat-c" data-i="2">
-        <p class="mono">So funktioniert die Vermittlung</p>
-        <h2 class="beat-h">PC und Lizenz. Über <em>eine Quelle</em> direkt zu dir.</h2>
-        <figure class="static-icons schema" aria-hidden="true">
+  <section class="mod netz" id="vermittlung" aria-labelledby="h-netz">
+    <div class="glow" aria-hidden="true"></div>
+    <canvas aria-hidden="true"></canvas>
+    <div class="netz-copy">
+      <p class="mono" data-rv>So funktioniert die Vermittlung</p>
+      <h2 class="big-h" id="h-netz" data-rv>PC und Lizenz. Über <em>eine Quelle</em> direkt zu dir.</h2>
+      <figure class="static-icons schema" aria-hidden="true">
           <svg viewBox="0 0 440 240" style="width:min(100%,520px);height:auto;stroke-width:2"><path d="M70 60 C150 60 150 120 220 120"/><path d="M70 180 C150 180 150 120 220 120"/><path class="rgb" d="M220 120 L370 120"/><circle cx="70" cy="60" r="9"/><circle cx="70" cy="180" r="9"/><rect class="fill" x="176" y="96" width="88" height="48" rx="3"/><circle class="rgb" cx="380" cy="120" r="13"/></svg>
         </figure>
-      </div>
+    </div>
+    <span class="tag" data-t="pc" aria-hidden="true">PC</span>
+    <span class="tag" data-t="lic" aria-hidden="true">Lizenz</span>
+    <span class="tag o" data-t="du" aria-hidden="true">Du</span>
+  </section>
 
-      <div class="beat beat-c" data-i="3">
-        <h2 class="beat-h">Sowohl <em>privat</em> als auch <em>geschäftlich.</em></h2>
-      </div>
+  <section class="mod netz" aria-labelledby="h-privat">
+    <div class="glow" aria-hidden="true"></div>
+    <canvas aria-hidden="true"></canvas>
+    <div class="netz-copy">
+      <h2 class="big-h" id="h-privat" data-rv>Sowohl <em>privat</em> als auch <em>geschäftlich.</em></h2>
+    </div>
+    <span class="tag o" data-t="du" aria-hidden="true">Du</span>
+    <span class="tag o" data-t="privat" aria-hidden="true">Privat</span>
+    <span class="tag o" data-t="biz" aria-hidden="true">Geschäftlich</span>
+  </section>
 
-      <span class="tag" data-t="pc" aria-hidden="true">PC</span>
-      <span class="tag" data-t="lic" aria-hidden="true">Lizenz</span>
-      <span class="tag o" data-t="du" aria-hidden="true">Du</span>
-      <span class="tag o" data-t="privat" aria-hidden="true">Privat</span>
-      <span class="tag o" data-t="biz" aria-hidden="true">Geschäftlich</span>
-
-      <div class="beat beat-c beat-area" data-i="4">
-        <p class="mono">AOI DP Bereiche</p>
-        <h2 class="beat-h big">AOI <em>Net</em>Source</h2>
-        <a class="btn" href="../aoi-netsource/">zum PC Katalog <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4"/></svg></a>
-      </div>
-      <div class="area-labels">
-        <div><b>Alltag</b><span>PC + Programm</span></div>
-        <div><b>Büro</b><span>PC + Office</span></div>
-        <div><b>Gaming</b><span>Gaming-PC + Spiel</span></div>
-      </div>
+  <section class="mod hero row-sec" id="produkte" aria-labelledby="h-area">
+    <div class="glow" aria-hidden="true"></div>
+    <canvas aria-hidden="true"></canvas>
+    <div class="row-copy">
+      <p class="mono" data-rv>AOI DP Bereiche</p>
+      <h2 class="big-h huge" id="h-area" data-rv>AOI <em>Net</em>Source</h2>
+      <p data-rv><a class="btn" href="../aoi-netsource/">zum PC Katalog <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4"/></svg></a></p>
+    </div>
+    <div class="row-labels">
+      <a href="../aoi-netsource/#alltag"><b>Alltag</b><span>PC + Programm</span></a>
+      <a href="../aoi-netsource/#buero"><b>Büro</b><span>PC + Office</span></a>
+      <a href="../aoi-netsource/#gaming"><b>Gaming</b><span>Gaming-PC + Spiel</span></a>
     </div>
   </section>
 
@@ -93,14 +162,13 @@
     </div>
   </section>
 
-  <section class="sec contact" id="kontakt" aria-labelledby="h-kontakt" style="padding-top:0">
+  <section class="sec contact" id="kontakt" aria-labelledby="h-kontakt">
     <div class="wrap">
       <p class="mono" data-rv>Kontakt</p>
       <h2 class="sec-h" id="h-kontakt" data-rv style="margin-top:12px">Schreib uns, was du suchst</h2>
       <div data-rv>
         <div class="mailcard">
           <a class="mail" href="mailto:ruff@aoi-d-products.de">ruff@aoi-d-products.de</a>
-          <p class="mono">Anfragen bitte per E-Mail</p>
         </div>
       </div>
     </div>

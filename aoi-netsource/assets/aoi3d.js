@@ -44,6 +44,7 @@ export const M = {
   led: bas({ color: ACCENT, toneMapped: false }),
   ledO: bas({ color: SIGNAL, toneMapped: false }),
   orange: std({ color: SIGNAL, metalness: .15, roughness: .32, emissive: 0xa8560f, emissiveIntensity: .55 }),
+  bolt: std({ color: SIGNAL, metalness: .2, roughness: .3, emissive: 0xd8701a, emissiveIntensity: 1.25 }),
   window: bas({ color: 0xc7d4ff, toneMapped: false }),
   // Glas legt nur Spiegelungen obendrauf und dunkelt das Innere nicht ab
   glass: std({ color: 0xffffff, metalness: 1, roughness: .05, transparent: true, opacity: .26, blending: THREE.AdditiveBlending, depthWrite: false, envMapIntensity: 1.6 }),
@@ -149,83 +150,133 @@ function studioEnv(renderer) {
   pm.dispose(); return rt.texture;
 }
 
-export function createStage(canvas, { fov = 28 } = {}) {
+/* ---------- Studio: ein Renderer für alle Module ----------
+   Jedes Modul hat eine eigene Leinwand im normalen Seitenfluss. Gezeichnet wird zentral in einem Kontext und dann
+   kopiert. So scrollt das 3D exakt mit der Seite, und Handys brauchen nur einen WebGL-Kontext. */
+export function createStudio({ fov = 28 } = {}) {
   const local = /^(localhost|127\.)/.test(location.hostname);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: local });
+  const gl = document.createElement('canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
   renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(1);
+  renderer.setScissorTest(true);
+  renderer.autoClear = false;
   const scene = new THREE.Scene();
   scene.environment = studioEnv(renderer);
   scene.fog = new THREE.Fog(BG, 20, 40);
-  const camera = new THREE.PerspectiveCamera(fov, 1, .1, 140);
-  camera.layers.enable(1);
-  const root = new THREE.Group(); scene.add(root);
 
   const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(-4, 7, 7); scene.add(key);
   const fill = new THREE.DirectionalLight(0xa9bcff, .5); fill.position.set(6, 2, 5); scene.add(fill);
   const rimA = new THREE.DirectionalLight(ACCENT, 2.4); rimA.position.set(4, 4, -6); scene.add(rimA);
   const rimB = new THREE.DirectionalLight(ACCENT, 1.8); rimB.position.set(-6, 2, -5); scene.add(rimB);
+  // Licht im Gaming-PC. Die Anzahl der Lichter bleibt immer gleich, sonst baut three.js beim Wechsel die Shader neu.
+  const pa = new THREE.PointLight(ACCENT, 0, 3.4, 2); scene.add(pa);
+  const pb = new THREE.PointLight(SIGNAL, 0, 2.4, 2); scene.add(pb);
 
-  const stage = { renderer, scene, camera, root, rimA, rimB, reflect: true, w: 1, h: 1, aspect: 1, dpr: 1, tick: null, active: true };
-  if (local) window.__stage = stage;
-  const maxDpr = Math.min(devicePixelRatio || 1, innerWidth < 800 ? 1.6 : 2);
-  stage.dpr = maxDpr;
+  const views = [];
+  const studio = { renderer, scene, views, key, rimA, rimB, pa, pb, reflect: true, quality: 1, px: 0, py: 0, drawn: 0 };
+  if (local) window.__studio = studio;
+  let tx = 0, ty = 0;
+  addEventListener('pointermove', e => { if (e.pointerType !== 'touch') { tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; } }, { passive: true });
 
-  function resize() {
-    const r = canvas.parentElement.getBoundingClientRect();
-    const w = Math.round(r.width), h = Math.round(r.height);
-    // Mobile Adressleiste: kleine Höhenänderungen nicht neu berechnen
-    if (w === stage.w && Math.abs(h - stage.h) < 90 && stage.h > 1) return;
-    stage.w = w; stage.h = h; stage.aspect = w / h;
-    renderer.setPixelRatio(stage.dpr); renderer.setSize(w, h, false);
-    camera.aspect = stage.aspect; camera.updateProjectionMatrix();
-    stage.onResize && stage.onResize();
-  }
-  new ResizeObserver(resize).observe(canvas.parentElement);
-  resize();
-
-  stage.visH = d => 2 * d * Math.tan(THREE.MathUtils.degToRad(fov / 2));
-
-  stage.render = () => {
-    renderer.autoClear = false; renderer.clear();
-    if (stage.reflect) {
-      mirrorU.value = 1; root.scale.y = -1; camera.layers.disable(1);
-      renderer.render(scene, camera);
-      renderer.clearDepth();
-      mirrorU.value = 0; root.scale.y = 1; camera.layers.enable(1);
-    }
-    renderer.render(scene, camera);
+  studio.view = (canvas, { tick, onResize, mirror, el = canvas.parentElement }) => {
+    const v = { canvas, ctx: canvas.getContext('2d'), el, root: new THREE.Group(), camera: new THREE.PerspectiveCamera(fov, 1, .1, 140),
+      w: 0, h: 0, pw: 0, ph: 0, q: 0, aspect: 1, p: 0, active: false, tick, onResize, mirror };
+    v.camera.layers.enable(1);
+    v.root.visible = false; scene.add(v.root);
+    v.visH = d => 2 * d * Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    views.push(v);
+    return v;
   };
 
-  // Läuft nur, solange die Bühne im Bild ist. Bei Rucklern erst Auflösung senken, dann Spiegelung aus.
+  function measure(v, vh) {
+    const r = v.el.getBoundingClientRect();
+    const w = Math.round(r.width), h = Math.round(r.height);
+    v.active = w > 0 && h > 0 && r.bottom > -40 && r.top < vh + 40;
+    // 0 = Oberkante erreicht den unteren Fensterrand, 1 = Unterkante verlässt den oberen
+    v.p = clamp((vh - r.top) / (vh + r.height || 1));
+    if (!w || !h || (w === v.w && h === v.h && v.q === studio.quality)) return;
+    v.w = w; v.h = h; v.q = studio.quality; v.aspect = w / h;
+    // Nie mehr als etwa 1,7 Megapixel je Modul, sonst wird es auf großen Bildschirmen zäh
+    const dpr = Math.min(devicePixelRatio || 1, innerWidth < 800 ? 1.7 : 2, Math.sqrt(1.7e6 / (w * h))) * studio.quality;
+    v.pw = Math.max(1, Math.round(w * dpr)); v.ph = Math.max(1, Math.round(h * dpr));
+    v.canvas.width = v.pw; v.canvas.height = v.ph;
+    v.camera.aspect = v.aspect; v.camera.updateProjectionMatrix();
+    v.onResize && v.onResize(v);
+  }
+
+  function draw(v) {
+    if (gl.width < v.pw || gl.height < v.ph) renderer.setSize(Math.max(gl.width, v.pw), Math.max(gl.height, v.ph), false);
+    renderer.setViewport(0, 0, v.pw, v.ph); renderer.setScissor(0, 0, v.pw, v.ph);
+    renderer.clear();
+    v.root.visible = true;
+    if (studio.reflect) {
+      v.mirror && v.mirror(true);
+      mirrorU.value = 1; v.root.scale.y = -1; v.camera.layers.disable(1);
+      renderer.render(scene, v.camera);
+      renderer.clearDepth();
+      mirrorU.value = 0; v.root.scale.y = 1; v.camera.layers.enable(1);
+      v.mirror && v.mirror(false);
+    }
+    renderer.render(scene, v.camera);
+    v.root.visible = false;
+    v.ctx.globalCompositeOperation = 'copy';
+    v.ctx.drawImage(gl, 0, gl.height - v.ph, v.pw, v.ph, 0, 0, v.pw, v.ph);
+    pa.intensity = pb.intensity = 0;
+    studio.drawn++;
+  }
+
+  // Ein Bild für alle Module, die gerade im Fenster sind. Gibt die Rechenzeit in Millisekunden zurück.
+  studio.frame = (dt, now) => {
+    const t0 = performance.now(), vh = innerHeight;
+    studio.px = damp(studio.px, tx, 3, dt); studio.py = damp(studio.py, ty, 3, dt);
+    for (const v of views) measure(v, vh);
+    for (const v of views) if (v.active && v.tick(dt, now, v) !== false) draw(v);
+    return performance.now() - t0;
+  };
+
+  // Bei Rucklern erst Auflösung senken, dann Spiegelung aus
   let last = 0, slow = 0, frames = 0;
   function loop(now) {
     requestAnimationFrame(loop);
-    if (!stage.active || document.hidden) { last = 0; return; }
+    if (document.hidden) { last = 0; return; }
     const dt = last ? Math.min((now - last) / 1000, .05) : 1 / 60;
     const raw = last ? now - last : 16; last = now;
-    stage.tick && stage.tick(dt, now / 1000);
-    stage.render();
+    studio.frame(dt, now / 1000);
     if (raw < 250 && ++frames > 40) {
       slow += raw > 30 ? 1 : -.5; slow = Math.max(0, slow);
       if (slow > 40) {
         slow = 0; frames = 0;
-        if (stage.dpr > 1.05) { stage.dpr = Math.max(1, stage.dpr - .3); renderer.setPixelRatio(stage.dpr); renderer.setSize(stage.w, stage.h, false); }
-        else stage.reflect = false;
+        if (studio.quality > .7) studio.quality = Math.max(.7, studio.quality - .15);
+        else studio.reflect = false;
       }
     }
   }
-  stage.start = () => {
-    // Shader vorab bauen, sonst ruckelt es beim ersten Auftauchen eines Objekts
+  studio.start = async () => {
+    // Shader vorab bauen, sonst ruckelt es beim ersten Auftauchen eines Moduls
     const hidden = [];
     scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
-    renderer.compile(scene, camera);
+    const cam = views[0].camera;
+    try { await renderer.compileAsync(scene, cam); } catch (e) { renderer.compile(scene, cam); }
     hidden.forEach(o => { o.visible = false; });
     requestAnimationFrame(loop);
+    views.forEach(v => v.canvas.classList.add('on'));
+    // Modelle einzeln an die Grafikkarte schicken, sonst stockt das Scrollen beim ersten Auftauchen eines Moduls
+    for (const v of views) {
+      await new Promise(r => setTimeout(r, 60));
+      const off = [], cam = new THREE.PerspectiveCamera(fov, 1, .1, 140);
+      cam.position.set(0, 3, 30); cam.lookAt(0, 1, 0); cam.layers.enable(1);
+      v.root.traverse(o => { if (!o.visible) { off.push(o); o.visible = true; } });
+      v.root.visible = true;
+      renderer.setViewport(0, 0, 1, 1); renderer.setScissor(0, 0, 1, 1);
+      renderer.render(scene, cam);
+      v.root.visible = false;
+      off.forEach(o => { o.visible = false; });
+    }
   };
-  new IntersectionObserver(e => { stage.active = e[0].isIntersecting; }, { rootMargin: '10% 0px' }).observe(canvas.parentElement);
-  return stage;
+  return studio;
 }
 
 // Prüft vorab, ob WebGL überhaupt geht
@@ -251,117 +302,189 @@ function fan(R, ring = M.led) {
   g.add(rotor); g.userData.rotor = rotor;
   return g;
 }
-function powerLed(p, x, y, z, r = .055, strength = .55) {
+function powerLed(p, x, y, z, r = .055, strength = .55, mat = M.led, col = ACCENT) {
   add(p, new THREE.TorusGeometry(r, r * .22, 10, 32), M.aluDark, x, y, z);
-  add(p, disc(r * .72, .008), M.led, x, y, z + .002);
-  const gl = glow(ACCENT, r * 9, strength); gl.position.set(x, y, z + .05); p.add(gl);
+  add(p, disc(r * .72, .008), mat, x, y, z + .002);
+  const gl = glow(col, r * 9, strength); gl.position.set(x, y, z + .05); p.add(gl);
+}
+// Teile, die sich beim Hereinscrollen zum PC zusammensetzen: Richtung und Verzögerung je Teil
+function part(list, obj, dx, dy, dz, delay = 0) {
+  list.push({ obj, base: obj.position.clone(), dir: new THREE.Vector3(dx, dy, dz), delay });
+  return obj;
+}
+export function assemble(model, a) {
+  const u = model.userData;
+  if (u.a === a || !u.parts) return;
+  u.a = a;
+  for (const pt of u.parts) {
+    const k = 1 - smooth(seg(a, pt.delay, pt.delay + .5));
+    pt.obj.position.copy(pt.base).addScaledVector(pt.dir, k);
+  }
+}
+// Die Leistungsstufe als 3D-Blitze, wie im Icon der Seite
+let boltGeo;
+export function buildBolts(n) {
+  if (!boltGeo) {
+    const S = .027, X = x => (x - 12) * S, Y = y => -(y - 12) * S, s = new THREE.Shape();
+    s.moveTo(X(13.2), Y(1.8)); s.lineTo(X(4.6), Y(13.4)); s.lineTo(X(10.7), Y(13.4)); s.lineTo(X(9.4), Y(22.2));
+    s.lineTo(X(18.3), Y(10.1)); s.lineTo(X(12), Y(10.1)); s.closePath();
+    boltGeo = extr(s, .05, .012, 1);
+  }
+  const g = new THREE.Group(), items = [];
+  for (let i = 0; i < n; i++) {
+    const b = new THREE.Group(); b.position.x = (i - (n - 1) / 2) * .46;
+    add(b, boltGeo, M.bolt);
+    const gl = glow(SIGNAL, 1, .34); gl.position.z = -.05; b.add(gl);
+    g.add(b); items.push(b);
+  }
+  g.userData.items = items;
+  return g;
 }
 
-/* ---------- PCs (Boden bei y=0, Front zeigt nach +Z) ---------- */
-export function buildAlltag() {
-  const g = new THREE.Group(), W = .94, H = 1.54, D = 1.24, f = .04, cy = f + H / 2, zF = D / 2;
-  add(g, rbox(W, H, D, .15, 5), M.alu, 0, cy, 0);
-  const fr = new THREE.Group(); fr.position.set(0, cy, zF + .001); g.add(fr);
-  powerLed(fr, 0, H / 2 - .27, .004, .06, .2);
+/* ---------- PCs (Boden bei y=0, Front zeigt nach +Z). Stufe 1 Light, 2 Medium, 3 Strong ---------- */
+export function buildAlltag(tier = 1) {
+  const g = new THREE.Group(), W = .94, H = 1.54, D = 1.24, f = .04, cy = f + H / 2, zF = D / 2, parts = [];
+  const strong = tier === 3;
+  add(g, rbox(W, H, D, .15, 5), strong ? M.gun : M.alu, 0, cy, 0);
+  const fr = new THREE.Group(); fr.position.set(0, cy, zF + .007); g.add(fr);
+  add(fr, rbox(W - .24, H - .24, .012, .05, 2), strong ? M.gunSoft : M.aluDark, 0, 0, -.006);
+  if (strong) powerLed(fr, 0, H / 2 - .27, .004, .06, .34, M.ledO, SIGNAL);
+  else powerLed(fr, 0, H / 2 - .27, .004, .06, tier === 2 ? .34 : .2);
   add(fr, rbox(.13, .034, .004, .012), M.hole, -.11, H / 2 - .48, .002);
   add(fr, rbox(.13, .034, .004, .012), M.hole, .11, H / 2 - .48, .002);
-  holes(fr, W - .3, .56, .036, .0115, 0, -.13, .002);
-  add(fr, rbox(.42, .02, .004, .008), M.hole, 0, -H / 2 + .17, .002);
-  holes(g, W - .3, W - .3, .05, .012, 0, f + H + .001, -.02, 0, -Math.PI / 2, true);
+  holes(fr, W - .36, .56, .036, .0115, 0, -.13, .002);
+  if (tier > 1) {
+    add(fr, rbox(.46, .022, .006, .008), strong ? M.ledO : M.led, 0, -H / 2 + .2, .004);
+    const gl = glow(strong ? SIGNAL : ACCENT, 1.1, .36, .24); gl.position.set(0, -H / 2 + .2, .06); fr.add(gl);
+  } else add(fr, rbox(.42, .02, .004, .008), M.hole, 0, -H / 2 + .2, .002);
+  part(parts, fr, 0, 0, 1.5, 0);
+  const tp = new THREE.Group(); tp.position.set(0, f + H + .001, -.02); g.add(tp);
+  holes(tp, W - .3, W - .3, .05, .012, 0, 0, 0, 0, -Math.PI / 2, true);
+  if (tier > 1) add(tp, new THREE.TorusGeometry((W - .3) / 2 + .03, .009, 8, 48).rotateX(Math.PI / 2), strong ? M.ledO : M.led);
+  part(parts, tp, 0, 1.1, 0, .12);
   const ra = new THREE.Group(); ra.position.set(0, cy, -D / 2 - .001); ra.rotation.y = Math.PI; g.add(ra);
   add(ra, rbox(W - .34, .3, .004, .02), M.gunSoft, 0, H / 2 - .4, 0);
   for (let i = 0; i < 4; i++) add(ra, rbox(.11, .034, .006, .012), M.hole, -.21 + i * .14, H / 2 - .4, .003);
   holes(ra, W - .3, .5, .04, .012, 0, -.2, .001);
+  part(parts, ra, 0, 0, -1.4, .2);
   add(g, rbox(.14, .06, D - .34, .02), M.rubber, -.26, .03, 0);
   add(g, rbox(.14, .06, D - .34, .02), M.rubber, .26, .03, 0);
-  g.userData.h = f + H; g.userData.w = W; g.userData.d = D;
+  Object.assign(g.userData, { h: f + H, w: W, d: D, parts });
   return g;
 }
 
-export function buildBuero() {
-  const g = new THREE.Group(), W = .86, H = 2.38, D = 1.92, f = .05, cy = f + H / 2, zF = D / 2;
-  add(g, rbox(W, H, D, .07, 4), M.gun, 0, cy, 0);
-  add(g, rbox(W - .1, H - .1, .03, .012), M.gunSoft, 0, cy, zF);
+export function buildBuero(tier = 1) {
+  const g = new THREE.Group(), W = .86, H = 2.38, D = 1.92, f = .05, cy = f + H / 2, zF = D / 2, parts = [], rotors = [];
+  const strong = tier === 3;
+  add(g, rbox(W, H, D, .07, 4), strong ? M.gunSoft : M.gun, 0, cy, 0);
   const fr = new THREE.Group(); fr.position.set(0, cy, zF + .017); g.add(fr);
+  add(fr, rbox(W - .1, H - .1, .03, .012), strong ? M.black : M.gunSoft, 0, 0, -.017);
   add(fr, rbox(W - .3, .016, .006, .004), M.alu, 0, H / 2 - .3, 0);
   add(fr, rbox(W - .3, .016, .006, .004), M.alu, 0, H / 2 - .48, 0);
   for (let i = 0; i < 5; i++) add(fr, rbox(.075, .016, .006, .004), M.aluDark, -.22 + i * .11, H / 2 - .74, 0);
-  powerLed(fr, 0, -H / 2 + .46, .006, .075);
+  if (strong) powerLed(fr, 0, -H / 2 + .46, .006, .075, .55, M.ledO, SIGNAL);
+  else powerLed(fr, 0, -H / 2 + .46, .006, .075);
   for (let i = 0; i < 5; i++) add(fr, rbox(W - .3, .012, .004, .003), M.hole, 0, -H / 2 + .86 + i * .07, 0);
+  if (tier > 1) {
+    add(fr, rbox(.014, H - .5, .006, .003), strong ? M.ledO : M.led, W / 2 - .1, 0, .002);
+    const gl = glow(strong ? SIGNAL : ACCENT, .7, .34, 4.4); gl.position.set(W / 2 - .1, 0, .06); fr.add(gl);
+  }
+  part(parts, fr, 0, 0, 1.9, 0);
   const side = new THREE.Group(); side.position.set(W / 2 + .001, cy, 0); side.rotation.y = Math.PI / 2; g.add(side);
-  holes(side, 1, .9, .042, .012, -.28, .55, 0);
+  add(side, rbox(D - .14, H - .14, .012, .02), strong ? M.black : M.gunSoft, 0, 0, -.006);
+  if (strong) {
+    // Starke Stufe: Sichtfenster mit Lüfter
+    add(side, rbox(1.16, 1.16, .006, .04), M.slab, -.1, .36, .002);
+    const fa = fan(.42, M.ledO); fa.position.set(-.1, .36, .012); side.add(fa); rotors.push(fa.userData.rotor);
+    const gl = glow(SIGNAL, 1.5, .26); gl.position.set(-.1, .36, .1); side.add(gl);
+  } else holes(side, 1, .9, .042, .012, -.28, .55, 0);
   add(side, rbox(D - .36, .008, .004, .002), M.black, 0, -H / 2 + .2, 0);
   add(side, rbox(D - .36, .008, .004, .002), M.black, 0, H / 2 - .12, 0);
+  part(parts, side, 1.5, 0, 0, .14);
   const ra = new THREE.Group(); ra.position.set(0, cy, -D / 2 - .001); ra.rotation.y = Math.PI; g.add(ra);
   add(ra, rbox(W - .3, .62, .004, .012), M.black, 0, H / 2 - .56, 0);
   for (let i = 0; i < 4; i++) add(ra, rbox(.26, .036, .006, .01), M.hole, 0, H / 2 - .36 - i * .13, .003);
   holes(ra, W - .3, .7, .045, .013, 0, -.1, .001);
   add(ra, rbox(W - .3, .4, .004, .012), M.gunSoft, 0, -H / 2 + .34, 0);
+  part(parts, ra, 0, 0, -1.6, .24);
   add(g, rbox(W - .06, .06, .22, .02), M.rubber, 0, .03, D / 2 - .24);
   add(g, rbox(W - .06, .06, .22, .02), M.rubber, 0, .03, -D / 2 + .24);
-  g.userData.h = f + H; g.userData.w = W; g.userData.d = D;
+  Object.assign(g.userData, { h: f + H, w: W, d: D, parts, rotors });
   return g;
 }
 
-export function buildGaming() {
+export function buildGaming(tier = 2) {
   const g = new THREE.Group(), W = 1.34, H = 2.74, D = 2.42, f = .06, t = .05;
-  const bot = f, top = f + H, cy = (bot + top) / 2, rotors = [];
+  const bot = f, top = f + H, cy = (bot + top) / 2, rotors = [], parts = [], strong = tier === 3;
   // Rahmen
   add(g, rbox(W, .08, D, .03), M.black, 0, top - .04, 0);
   add(g, rbox(W, .08, D, .03), M.black, 0, bot + .04, 0);
   for (const [x, z] of [[W / 2 - t / 2, D / 2 - t / 2], [-W / 2 + t / 2, D / 2 - t / 2], [W / 2 - t / 2, -D / 2 + t / 2], [-W / 2 + t / 2, -D / 2 + t / 2]])
     add(g, rbox(t, H - .1, t, .012), M.gun, x, cy, z);
   // Rückseite und geschlossene Seite: man kann den PC ja ganz herumdrehen
-  add(g, rbox(.03, H - .1, D - .04, .01), M.gun, -W / 2 + .018, cy, 0);
-  const sv = new THREE.Group(); sv.position.set(-W / 2 + .002, cy, 0); sv.rotation.y = -Math.PI / 2; g.add(sv);
+  const left = new THREE.Group(); left.position.set(-W / 2 + .018, cy, 0); g.add(left);
+  add(left, rbox(.03, H - .1, D - .04, .01), M.gun);
+  const sv = new THREE.Group(); sv.position.set(-.016, 0, 0); sv.rotation.y = -Math.PI / 2; left.add(sv);
   holes(sv, 1.5, .62, .05, .014, 0, H / 2 - .5, 0);
   add(sv, rbox(D - .5, .014, .006, .003), M.ledO, 0, -H / 2 + .62, 0);
-  add(g, rbox(W - .04, H - .1, .03, .01), M.gun, 0, cy, -D / 2 + .018);
-  const rv = new THREE.Group(); rv.position.set(0, cy, -D / 2 + .002); rv.rotation.y = Math.PI; g.add(rv);
+  part(parts, left, -1.3, 0, 0, .3);
+  const back = new THREE.Group(); back.position.set(0, cy, -D / 2 + .018); g.add(back);
+  add(back, rbox(W - .04, H - .1, .03, .01), M.gun);
+  const rv = new THREE.Group(); rv.position.set(0, 0, -.016); rv.rotation.y = Math.PI; back.add(rv);
   add(rv, rbox(.34, .78, .008, .01), M.black, .34, H / 2 - .62, 0);
   for (let i = 0; i < 5; i++) add(rv, rbox(.2, .036, .006, .006), M.hole, .34, H / 2 - .34 - i * .1, .005);
   add(rv, disc(.1, .008), M.hole, -.28, -H / 2 + .36, 0);
   holes(rv, .96, .34, .045, .012, 0, -H / 2 + .36, 0);
+  part(parts, back, 0, 0, -1.3, .3);
   // Netzteil-Abdeckung mit Lichtkante
-  add(g, rbox(W - .1, .44, D - .12, .02), M.gunSoft, 0, bot + .3, 0);
-  add(g, rbox(.006, .018, D - .5, .003), M.led, W / 2 - .052, bot + .46, 0);
+  const psu = new THREE.Group(); psu.position.set(0, bot + .3, 0); g.add(psu);
+  add(psu, rbox(W - .1, .44, D - .12, .02), M.gunSoft);
+  add(psu, rbox(.006, .018, D - .5, .003), M.led, W / 2 - .052, .16, 0);
+  part(parts, psu, 0, -.6, 1.4, .2);
   // Mainboard
   const by = bot + .52 + (H - .66) / 2;
-  add(g, rbox(.03, H - .72, D - .46, .01), M.pcb, -W / 2 + .1, by, -.08);
+  const board = add(g, rbox(.03, H - .72, D - .46, .01), M.pcb, -W / 2 + .1, by, -.08);
+  part(parts, board, -.9, 0, 0, .26);
   // Prozessor-Kühler
   const cool = new THREE.Group(); cool.position.set(-W / 2 + .36, top - .72, -.32); g.add(cool);
   add(cool, rbox(.36, .62, .32, .03), M.aluDark);
   for (let i = 0; i < 6; i++) add(cool, rbox(.37, .012, .33, .002), M.alu, 0, -.26 + i * .105, 0);
   const cf = fan(.26, M.ledO); cf.position.set(.0, 0, .2); cool.add(cf); rotors.push(cf.userData.rotor);
-  // Arbeitsspeicher
-  for (let i = 0; i < 3; i++) {
-    const z = .22 + i * .1;
-    add(g, rbox(.11, .46, .036, .006), M.black, -W / 2 + .19, top - .72, z);
-    add(g, rbox(.112, .03, .04, .004), M.led, -W / 2 + .19, top - .47, z);
+  part(parts, cool, 1.7, .5, 0, .1);
+  // Arbeitsspeicher, mehr Riegel je Stufe
+  for (let i = 0; i < tier + 1; i++) {
+    const r = new THREE.Group(); r.position.set(-W / 2 + .19, top - .72, .22 + i * .1); g.add(r);
+    add(r, rbox(.11, .46, .036, .006), M.black);
+    add(r, rbox(.112, .03, .04, .004), M.led, 0, .25, 0);
+    part(parts, r, 0, 1.2, 0, .16 + i * .03);
   }
   // Grafikkarte
   const gpu = new THREE.Group(); gpu.position.set(-W / 2 + .4, bot + .92, -.06); g.add(gpu);
   add(gpu, rbox(.58, .22, 1.62, .03), M.gun);
   add(gpu, rbox(.006, .03, 1.2, .003), M.led, .292, .02, 0);
   add(gpu, rbox(.5, .03, 1.5, .01), M.alu, 0, .125, 0);
-  // Zwei große Lüfter hinter der Front, wie im Icon
-  for (const y of [bot + 1.02, bot + 1.96]) {
-    const fa = fan(.47); fa.position.set(0, y, D / 2 - .14); g.add(fa); rotors.push(fa.userData.rotor);
-    const gl = glow(ACCENT, 1.7, .22); gl.position.set(0, y, D / 2 + .05); g.add(gl);
-  }
+  part(parts, gpu, 1.9, 0, 0, .06);
+  // Lüfter hinter der Front wie im Icon, mehr je Stufe
+  const fans = tier === 1 ? [[bot + 1.5, .56]] : tier === 2 ? [[bot + 1.02, .47], [bot + 1.96, .47]] : [[bot + .86, .34], [bot + 1.53, .34], [bot + 2.2, .34]];
+  fans.forEach(([y, R], i) => {
+    const hot = strong && i === 1;
+    const fa = fan(R, hot ? M.ledO : M.led); fa.position.set(0, y, D / 2 - .14); g.add(fa); rotors.push(fa.userData.rotor);
+    const gl = glow(hot ? SIGNAL : ACCENT, R * 3.6, .22); gl.position.set(0, 0, .19); fa.add(gl);
+    part(parts, fa, 0, 0, 1.6, .02 + i * .05);
+  });
   const rf = fan(.38); rf.position.set(0, top - .62, -D / 2 + .1); g.add(rf); rotors.push(rf.userData.rotor);
-  // Orange Lichtleiste an der Vorderkante, wie im Icon
-  add(g, rbox(.022, H - .34, .022, .006), M.ledO, W / 2 - .025, cy, D / 2 + .004);
-  const gs = glow(SIGNAL, .9, .5, 4); gs.position.set(W / 2 - .02, cy, D / 2 + .06); g.add(gs);
-  // Licht im Inneren
-  const pa = new THREE.PointLight(ACCENT, 5, 3.4, 2); pa.position.set(.1, cy + .2, .3); g.add(pa);
-  const pb = new THREE.PointLight(SIGNAL, 1.6, 2.4, 2); pb.position.set(.3, bot + 1.1, 1); g.add(pb);
+  part(parts, rf, 0, 0, -1, .24);
+  // Lichtleiste an der Vorderkante wie im Icon, ab Medium orange
+  const strip = new THREE.Group(); strip.position.set(W / 2 - .025, cy, D / 2 + .004); g.add(strip);
+  add(strip, rbox(.022, H - .34, .022, .006), tier > 1 ? M.ledO : M.led);
+  const gs = glow(tier > 1 ? SIGNAL : ACCENT, .9, .5, 4); gs.position.set(.005, 0, .056); strip.add(gs);
   // Glas vorne und an der Seite
   const gf = add(g, rbox(W - .03, H - .1, .012, .004), M.glass, 0, cy, D / 2 - .01); gf.renderOrder = 5;
   const gsd = add(g, rbox(.012, H - .1, D - .03, .004), M.glass, W / 2 - .01, cy, 0); gsd.renderOrder = 5;
+  part(parts, gf, 0, 0, 2.6, .36); part(parts, gsd, 2.4, 0, 0, .42);
   add(g, rbox(.18, .06, D - .4, .02), M.rubber, -W / 2 + .2, .03, 0);
   add(g, rbox(.18, .06, D - .4, .02), M.rubber, W / 2 - .2, .03, 0);
-  g.userData.h = top; g.userData.w = W; g.userData.d = D; g.userData.rotors = rotors;
+  Object.assign(g.userData, { h: top, w: W, d: D, rotors, parts, lightA: [.1, cy + .2, .3], lightB: [.3, bot + 1.1, 1], lightK: strong ? 1.35 : tier === 1 ? .7 : 1 });
   return g;
 }
 
@@ -478,8 +601,8 @@ function coreLabel() {
   return c;
 }
 // Kameras für den Blick von oben, wie auf einen Netzwerkplan
-export function networkCams(stage) {
-  const a = stage.aspect, port = a < .8, k = port ? 1.5 : Math.min(1.45, Math.max(1, 1.6 / a));
+export function networkCams(view) {
+  const a = view.aspect, port = a < .8, k = port ? 1.5 : Math.min(1.45, Math.max(1, 1.6 / a));
   return [
     { p: [port ? -.25 : -.45, 10 * k, 13.6 * k], t: [port ? -.25 : -.45, port ? 1.1 : 1.6, port ? .3 : 0] },
     { p: [port ? 1.6 : 3.3, 9.6 * k, 13 * k], t: [port ? 1.6 : 3.3, port ? 1.2 : 1.25, port ? .3 : 0] },
