@@ -466,4 +466,115 @@ export function buildOffice() {
   g.userData.h = H;
   return g;
 }
+/* ---------- Netzwerk: PC + Lizenz → NetSource → Du → Privat und Geschäftlich ---------- */
+function coreLabel() {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const x = c.getContext('2d');
+  x.textBaseline = 'middle';
+  x.font = '800 170px Archivo, Arial, sans-serif';
+  const w1 = x.measureText('Net').width, w2 = x.measureText('Source').width, xs = 512 - (w1 + w2) / 2;
+  x.fillStyle = '#9db1ff'; x.fillText('Net', xs, 256);
+  x.fillStyle = '#ffffff'; x.fillText('Source', xs + w1, 256);
+  return c;
+}
+// Kameras für den Blick von oben, wie auf einen Netzwerkplan
+export function networkCams(stage) {
+  const a = stage.aspect, port = a < .8, k = port ? 1.5 : Math.min(1.45, Math.max(1, 1.6 / a));
+  return [
+    { p: [port ? -.25 : -.45, 10 * k, 13.6 * k], t: [port ? -.25 : -.45, port ? 1.1 : 1.6, port ? .3 : 0] },
+    { p: [port ? 1.6 : 3.3, 9.6 * k, 13 * k], t: [port ? 1.6 : 3.3, port ? 1.2 : 1.25, port ? .3 : 0] },
+  ];
+}
+// Braucht die geladene Schrift Archivo für die Beschriftung des Würfels
+export function createNetwork(root) {
+  const V = (x, z) => new THREE.Vector3(x, .03, z);
+  const curves = {
+    pc: new THREE.CubicBezierCurve3(V(-4.6, -1.7), V(-2.6, -1.7), V(-2.6, 0), V(-.8, 0)),
+    lic: new THREE.CubicBezierCurve3(V(-4.6, 1.7), V(-2.6, 1.7), V(-2.6, 0), V(-.8, 0)),
+    out: new THREE.LineCurve3(V(.8, 0), V(3.5, 0)),
+    home: new THREE.CubicBezierCurve3(V(3.5, 0), V(4.6, 0), V(4.6, -1.7), V(6, -1.7)),
+    biz: new THREE.CubicBezierCurve3(V(3.5, 0), V(4.6, 0), V(4.6, 1.7), V(6, 1.7)),
+  };
+  const wire = (curve, mat, r = .024) => {
+    const geo = new THREE.TubeGeometry(curve, 60, r, 8, false);
+    const m = new THREE.Mesh(geo, mat); root.add(m);
+    m.userData.count = geo.index.count; geo.setDrawRange(0, 0);
+    return m;
+  };
+  const wires = { pc: wire(curves.pc, M.led), lic: wire(curves.lic, M.led), out: wire(curves.out, M.ledO, .03), home: wire(curves.home, M.ledO), biz: wire(curves.biz, M.ledO) };
+  const draw = (k, p) => { const m = wires[k]; m.visible = p > .001; m.geometry.setDrawRange(0, Math.floor(m.userData.count * p / 3) * 3); };
+
+  // Lichtpunkte, die durch die Leitungen laufen
+  const pulses = [['pc', 0], ['pc', .33], ['pc', .66], ['lic', .16], ['lic', .5], ['lic', .83], ['out', 0], ['out', .33], ['out', .66], ['home', 0], ['home', .5], ['biz', .25], ['biz', .75]].map(([k, o]) => {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), M.white));
+    g.add(glow(k === 'pc' || k === 'lic' ? ACCENT : SIGNAL, .85, .8));
+    root.add(g);
+    return { k, o, g };
+  });
+
+  const core = buildCore(coreLabel()); root.add(core); core.visible = false;
+  // Kunde: Ring mit Punkt, wie im Schema der bisherigen Seite
+  const client = new THREE.Group();
+  client.add(new THREE.Mesh(new THREE.TorusGeometry(.42, .05, 14, 56).rotateX(Math.PI / 2), M.ledO));
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(.14, 20, 16), M.ledO); dot.position.y = .14; client.add(dot);
+  const gl = glow(SIGNAL, 2, .35); gl.position.y = .2; client.add(gl);
+  root.add(client);
+  const place = (obj, sw, sd) => {
+    const wrap = new THREE.Group(), spin = new THREE.Group();
+    spin.add(obj); wrap.add(spin); wrap.add(contactShadow(sw, sd)); root.add(wrap);
+    return { wrap, spin };
+  };
+  const house = place(buildHouse(), 2.6, 2.4), office = place(buildOffice(), 2.4, 2.4);
+
+  let Xs = 1, port = false;
+  const p0 = new THREE.Vector3();
+  return {
+    layout(isPort) {
+      port = isPort; Xs = port ? .46 : 1;
+      Object.values(wires).forEach(w => { w.scale.x = Xs; });
+      client.position.set(Xs * 3.5, 0, 0);
+      house.wrap.position.set(Xs * 6.95, 0, -1.7);
+      office.wrap.position.set(Xs * 6.95, 0, 1.7);
+    },
+    // w1 bis w3: wie weit die Leitungen gezeichnet sind, die anderen Werte sind Größen von 0 bis 1
+    update({ now, t, calm, px, w1, w2, w3, coreS, clientS, houseS }) {
+      draw('pc', w1); draw('lic', w1); draw('out', w2); draw('home', w3); draw('biz', w3);
+      core.visible = coreS > .004;
+      core.scale.setScalar(Math.max(.001, coreS));
+      core.rotation.y = Math.sin(t * .35) * .05 + px * .06;
+      client.visible = clientS > .004;
+      client.scale.setScalar(Math.max(.001, clientS));
+      const hs = houseS * (port ? .62 : .86);
+      house.wrap.visible = office.wrap.visible = hs > .004;
+      house.wrap.scale.setScalar(Math.max(.001, hs)); office.wrap.scale.setScalar(Math.max(.001, hs));
+      house.spin.rotation.y = office.spin.rotation.y = -.5 + px * .08;
+      // Lichtpunkte laufen erst, wenn die Leitung fertig ist
+      pulses.forEach(p => {
+        const w = wires[p.k], shown = w.visible && w.geometry.drawRange.count >= w.userData.count * .96;
+        p.g.visible = shown;
+        if (!shown) return;
+        curves[p.k].getPointAt(calm ? p.o : (now * .34 + p.o) % 1, p0);
+        p.g.position.set(p0.x * Xs, .06, p0.z);
+      });
+    },
+    // Kleine Schilder, die an 3D-Punkten hängen
+    tags(list, camera, stage, alpha) {
+      camera.updateMatrixWorld();
+      list.forEach(({ el, k }) => {
+        const a = alpha(k);
+        el.style.visibility = a > .01 ? 'visible' : 'hidden';
+        if (a <= .01) return;
+        if (k === 'pc') p0.set(Xs * -4.6, 2.05, -1.7);
+        else if (k === 'lic') p0.set(Xs * -4.6, 1.75, 1.7);
+        else if (k === 'du') p0.set(Xs * 3.5, .75, 0);
+        else if (k === 'privat') p0.set(Xs * 6.95, port ? 1.2 : 1.6, -1.7);
+        else p0.set(Xs * 6.95, port ? 1.8 : 2.45, 1.7);
+        p0.project(camera);
+        el.style.opacity = a;
+        el.style.transform = `translate(-50%,-100%) translate(${((p0.x + 1) / 2 * stage.w).toFixed(1)}px,${((1 - p0.y) / 2 * stage.h).toFixed(1)}px)`;
+      });
+    },
+  };
+}
 export { floorSpot };

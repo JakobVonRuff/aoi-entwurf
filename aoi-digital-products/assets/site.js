@@ -139,5 +139,5 @@ if (matchMedia('(hover:hover)').matches) document.querySelectorAll('.mailcard').
   c.addEventListener('pointerleave', () => { c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); });
 });
 
-/* ---------- Beim lokalen Testen zeigen Querverweise auf die Schwesterseite im selben Ordner ---------- */
-if (/^(localhost|127\.)/.test(location.hostname)) document.querySelectorAll('a[data-local]').forEach(a => { a.href = a.dataset.local; });
+/* ---------- Auf den echten Domains bleibt die volle Adresse, überall sonst zeigen Querverweise auf die Schwesterseite im selben Projekt ---------- */
+if (!/(^|\.)aoi-(netsource|digital-products)\.com$/.test(location.hostname)) document.querySelectorAll('a[data-local]').forEach(a => { a.href = a.dataset.local; });
